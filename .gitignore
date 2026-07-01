@@ -1,0 +1,39 @@
+# Logs produced by setup.ps1
+*.log
+
+# Secrets / local env
+.env
+.env.*
+*.env
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+ehthumbs.db
+desktop.ini
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+*.stackdump
+
+# Editors / IDEs
+.vscode/
+.idea/
+.vs/
+*.suo
+*.user
+*.swp
+*~
+*.bak
+*.tmp
+
+# PowerShell test / analysis output
+testResults*.xml
+coverage*.xml

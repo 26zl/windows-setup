@@ -133,6 +133,9 @@ $winget = @(
     'Rufus.Rufus'
     'Balena.Etcher'
     'Valve.Steam'
+
+    # communication
+    'Discord.Discord'
 )
 Write-Host "`n=== winget apps ($($winget.Count)) ===" -ForegroundColor Magenta
 foreach ($pkg in $winget) { Install-App $pkg }
@@ -151,6 +154,56 @@ Write-Host "`n=== Store apps ===" -ForegroundColor Magenta
 Install-App '9P7GGFL7DX57' 'msstore'   # Harden System Security
 Install-App '9MSMLRH6LZF3' 'msstore'   # Windows Notepad
 # AppControl Manager (same author): Install-App '9PNG1JDDTGP8' 'msstore'
+
+# Microsoft Office
+Write-Host "`n=== Microsoft Office ===" -ForegroundColor Magenta
+$word = Join-Path $env:ProgramFiles 'Microsoft Office\root\Office16\WINWORD.EXE'
+if (Test-Path $word) {
+    Write-Host "    already installed (skipped)" -ForegroundColor DarkGray
+} else {
+    $office = Join-Path $env:TEMP 'OfficeSetup.exe'
+    try {
+        Invoke-WebRequest 'https://github.com/26zl/windows-setup/raw/main/office/OfficeSetup.exe' -OutFile $office -UseBasicParsing
+        Write-Host "==> running OfficeSetup.exe" -ForegroundColor Cyan
+        Start-Process $office -Wait
+    } catch {
+        Write-Host "    Office install failed: $($_.Exception.Message)" -ForegroundColor Yellow
+        $Failed += 'Microsoft Office'
+    }
+}
+
+# Desktop shortcuts for portable GUI apps
+Write-Host "`n=== Desktop shortcuts (portable apps) ===" -ForegroundColor Magenta
+$desktop = [Environment]::GetFolderPath('Desktop')
+$pkgRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+$portables = @{
+    'OO-Software.ShutUp10'            = 'OOSU10.exe'
+    'lostindark.DriverStoreExplorer' = 'RAPR.exe'
+    'Malwarebytes.AdwCleaner'        = 'adwcleaner.exe'
+    'Rufus.Rufus'                    = 'rufus*.exe'
+}
+$shell = New-Object -ComObject WScript.Shell
+foreach ($id in $portables.Keys) {
+    $exe = Get-ChildItem $pkgRoot -Recurse -Filter $portables[$id] -ErrorAction SilentlyContinue |
+           Where-Object FullName -like "*$id*" | Select-Object -First 1
+    if (-not $exe) { Write-Host "    $id : exe not found (skipped)" -ForegroundColor DarkGray; continue }
+    $name = ($id -split '\.')[-1]
+    $lnk = $shell.CreateShortcut((Join-Path $desktop "$name.lnk"))
+    $lnk.TargetPath = $exe.FullName
+    $lnk.Save()
+    Write-Host "    $name -> Desktop" -ForegroundColor DarkGray
+}
+# Sysinternals
+$sysDir = Get-ChildItem $pkgRoot -Directory -ErrorAction SilentlyContinue |
+          Where-Object Name -like 'Microsoft.Sysinternals.Suite*' | Select-Object -First 1
+if ($sysDir) {
+    $lnk = $shell.CreateShortcut((Join-Path $desktop 'Sysinternals.lnk'))
+    $lnk.TargetPath = $sysDir.FullName
+    $lnk.Save()
+    Write-Host "    Sysinternals -> Desktop" -ForegroundColor DarkGray
+} else {
+    Write-Host "    Sysinternals : folder not found (skipped)" -ForegroundColor DarkGray
+}
 
 # Scoop
 Write-Host "`n=== Scoop ===" -ForegroundColor Magenta

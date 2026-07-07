@@ -85,7 +85,7 @@ $winget = @(
     'StrawberryPerl.StrawberryPerl'
 
     # native build toolchains (C/C++, Rust MSVC, native node/python modules)
-    'Microsoft.VisualStudio.2022.BuildTools'
+    'Microsoft.VisualStudio.2022.BuildTools'  # C++ toolset (VCTools workload) added below
     'LLVM.LLVM'
     'MSYS2.MSYS2'
 
@@ -94,6 +94,7 @@ $winget = @(
     'Oven-sh.Bun'
     'Chocolatey.Chocolatey'
     'astral-sh.uv'                    # fast Python package/project manager
+    'Devolutions.UniGetUI'           # GUI for winget/scoop/choco/pip/npm (formerly WingetUI)
 
     # containers / virtualization / database / api
     'Docker.DockerDesktop'
@@ -147,6 +148,50 @@ if (Test-Path $torExe) {
     Write-Host "    already installed (skipped reinstall)" -ForegroundColor DarkGray
 } else {
     Install-App 'TorProject.TorBrowser'
+}
+
+# MSVC C++ build toolset - the winget BuildTools package ships no workloads, so
+# add VCTools here. --includeRecommended pulls the full native toolchain
+# (cl.exe compiler, link.exe linker, CRT/STL, CMake/MSBuild, Windows SDK) that
+# Rust MSVC, node-gyp and native Python modules all build against.
+Write-Host "`n=== MSVC C++ build toolset ===" -ForegroundColor Magenta
+$vsInstaller = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer'
+$vswhere     = Join-Path $vsInstaller 'vswhere.exe'
+$vsSetup     = Join-Path $vsInstaller 'setup.exe'
+$vcComponent = 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64'
+if (-not (Test-Path $vswhere)) {
+    Write-Host "    vswhere not found - BuildTools didn't install; re-run after it does" -ForegroundColor Yellow
+    $Failed += 'VC++ toolset (BuildTools missing)'
+} else {
+    $vcPath = & $vswhere -latest -products * -requires $vcComponent -property installationPath 2>$null
+    if ($vcPath) {
+        Write-Host "    already installed ($vcPath)" -ForegroundColor DarkGray
+    } elseif (-not (Test-Path $vsSetup)) {
+        Write-Host "    VS setup.exe not found (skipped)" -ForegroundColor Yellow
+        $Failed += 'VC++ toolset (setup.exe missing)'
+    } else {
+        $btPath = & $vswhere -products 'Microsoft.VisualStudio.Product.BuildTools' -property installationPath 2>$null |
+                  Select-Object -First 1
+        if (-not $btPath) { $btPath = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\2022\BuildTools' }
+        Write-Host "==> adding VCTools workload to $btPath (compiler + linker + SDK, multi-GB download)" -ForegroundColor Cyan
+        # no --wait: installer 4.x rejects it (exit 87); Start-Process -Wait blocks instead.
+        # quote the path: Start-Process space-joins its args without quoting.
+        $vsArgs = @(
+            'modify', '--installPath', ('"{0}"' -f $btPath),
+            '--add', 'Microsoft.VisualStudio.Workload.VCTools', '--includeRecommended',
+            '--passive', '--norestart'
+        )
+        $proc = Start-Process $vsSetup -ArgumentList $vsArgs -Wait -PassThru
+        # trust vswhere over the exit code - it reflects what actually got installed
+        $vcNow = & $vswhere -latest -products * -requires $vcComponent -property installationPath 2>$null
+        if ($vcNow) {
+            Write-Host "    MSVC C++ toolset installed (cl.exe, link.exe, CRT, Windows SDK)" -ForegroundColor DarkGray
+            if ($proc.ExitCode -eq 3010) { Write-Host "    reboot required to finish" -ForegroundColor Yellow }
+        } else {
+            Write-Host "    VCTools install failed (exit $($proc.ExitCode)) - component still missing" -ForegroundColor Yellow
+            $Failed += 'VC++ toolset (VCTools workload)'
+        }
+    }
 }
 
 # Microsoft Store apps via winget
@@ -246,9 +291,16 @@ if ((Get-CimInstance Win32_OperatingSystem).Caption -match 'Home') {
         }
     }
 }
-# WSL2 with Debian
-wsl --install -d Debian
-if ($LASTEXITCODE -ne 0) { Write-Host "    WSL/Debian returned exit $LASTEXITCODE - verify after reboot: wsl -l -v" -ForegroundColor Yellow; $Failed += 'WSL2/Debian' }
+# WSL2 with Debian (wsl --install errors with ERROR_ALREADY_EXISTS on re-runs)
+$env:WSL_UTF8 = '1'   # wsl.exe emits UTF-16 by default, which garbles captured output
+$wslDistros = (wsl.exe --list --quiet 2>$null) -replace "`0", '' |
+              ForEach-Object { $_.Trim() } | Where-Object { $_ }
+if ($wslDistros -contains 'Debian') {
+    Write-Host "    Debian (WSL) already installed" -ForegroundColor DarkGray
+} else {
+    wsl --install -d Debian
+    if ($LASTEXITCODE -ne 0) { Write-Host "    WSL/Debian returned exit $LASTEXITCODE - verify after reboot: wsl -l -v" -ForegroundColor Yellow; $Failed += 'WSL2/Debian' }
+}
 
 # Claude Code
 Write-Host "`n=== Claude Code (official native installer) ===" -ForegroundColor Magenta

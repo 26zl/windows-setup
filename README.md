@@ -30,8 +30,8 @@ Re-running is fine: installed apps are skipped. Note it also runs `winget upgrad
 ## What it installs
 
 - **Languages:** Python, Node.js LTS, Go, Rust, Java (Temurin 21), .NET SDK, Ruby, Perl
-- **Build tools:** VS Build Tools, LLVM/Clang, MSYS2 (gcc/make)
-- **Package managers:** pnpm, Bun, Chocolatey, Scoop, pipx, uv (npm/corepack come with Node; pipx via pip)
+- **Build tools:** VS Build Tools + MSVC C++ toolset (compiler, linker, CRT, Windows SDK — for Rust MSVC & native modules), LLVM/Clang, MSYS2 (gcc/make)
+- **Package managers:** pnpm, Bun, Chocolatey, Scoop, pipx, uv, UniGetUI (GUI front-end) (npm/corepack come with Node; pipx via pip)
 - **Dev tools:** Git, GitHub CLI, GitHub Desktop, VS Code, Windows Terminal, PowerShell 7, 7-Zip, VC++ Redistributables, just, jq, adb (platform-tools)
 - **Fullstack:** Docker Desktop, VirtualBox, DBeaver, Bruno
 - **Sysadmin / net:** PowerToys, Sysinternals Suite, WinSCP, PuTTY, MobaXterm, Tailscale, WireGuard, Mullvad VPN

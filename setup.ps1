@@ -23,8 +23,7 @@ if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
     return
 }
 
-# Run logs - persistent (BleachBit & co. wipe %TEMP%): transcript = full console
-# output, events = one timestamped line per outcome (installed / skipped / failed)
+# Persist a transcript and event summary outside the temporary directory.
 $logDir = Join-Path $env:LOCALAPPDATA 'windows-setup\logs'
 try { $null = New-Item $logDir -ItemType Directory -Force } catch { $logDir = $env:TEMP }
 $stamp    = '{0:yyyyMMdd-HHmmss}' -f (Get-Date)
@@ -249,8 +248,15 @@ if (Test-Path $word) {
             throw "signature check failed (status $($sig.Status))"
         }
         Write-Host "==> running OfficeSetup.exe" -ForegroundColor Cyan
-        Start-Process $office -Wait
-        Write-Event 'OK' 'Microsoft Office setup ran'
+        $officeProc = Start-Process $office -Wait -PassThru
+        # the stub can hand off and exit early, so trust the installed binary over the exit code
+        if (Test-Path $word) {
+            Write-Event 'OK' "Microsoft Office installed (setup exit $($officeProc.ExitCode))"
+        } else {
+            Write-Host "    Office setup exited ($($officeProc.ExitCode)) but WINWORD.EXE isn't there yet - check manually" -ForegroundColor Yellow
+            Write-Event 'WARN' "Microsoft Office not verified (setup exit $($officeProc.ExitCode))"
+            $Failed += 'Microsoft Office (verify manually)'
+        }
     } catch {
         Write-Host "    Office install failed: $($_.Exception.Message)" -ForegroundColor Yellow
         Write-Event 'FAIL' "Microsoft Office - $($_.Exception.Message)"
@@ -352,6 +358,20 @@ if ($wslDistros -contains 'Debian') {
     else { Write-Event 'OK' 'WSL2/Debian install initiated (finishes after reboot)' }
 }
 
+# Verify Sysmon by service state because fetched scripts may not preserve exit codes.
+Write-Host "`n=== Sysmon (system activity logging) ===" -ForegroundColor Magenta
+Invoke-Child "& ([scriptblock]::Create((Invoke-RestMethod https://github.com/26zl/personal-windows-setup/raw/main/sysmon/install-sysmon.ps1)))"
+$sysmonSvc = Get-CimInstance Win32_Service -Filter "Name='Sysmon' OR Name='Sysmon64'" -ErrorAction SilentlyContinue |
+             Select-Object -First 1
+if ($null -ne $sysmonSvc -and $sysmonSvc.State -eq 'Running') {
+    Write-Host "    Sysmon running (service $($sysmonSvc.Name))" -ForegroundColor DarkGray
+    Write-Event 'OK' "Sysmon running (service $($sysmonSvc.Name))"
+} else {
+    Write-Host "    Sysmon not running after setup - see output above" -ForegroundColor Yellow
+    Write-Event 'FAIL' 'Sysmon not running after install-sysmon.ps1'
+    $Failed += 'Sysmon'
+}
+
 # Claude Code
 Write-Host "`n=== Claude Code (official native installer) ===" -ForegroundColor Magenta
 Invoke-Child "& ([scriptblock]::Create((Invoke-RestMethod https://claude.ai/install.ps1)))"
@@ -363,6 +383,18 @@ Write-Host "`n=== Updating installed apps ===" -ForegroundColor Magenta
 winget upgrade --all --silent --accept-source-agreements --accept-package-agreements
 if ($LASTEXITCODE -ne 0) { Write-Host "    some upgrades reported issues (exit $LASTEXITCODE)" -ForegroundColor DarkGray }
 Write-Event 'INFO' "winget upgrade --all finished (exit $LASTEXITCODE)"
+
+# External tweak tools
+Write-Host "`n=== External tweak tools (opt in) ===" -ForegroundColor Magenta
+Write-Host "Optional. Each runs in its own new window, so it can't clear or overwrite this one." -ForegroundColor DarkGray
+if ((Read-Host "Configure any tweak tools? Type y to choose them one by one (anything else skips all)") -match '^(y|yes)$') {
+    Invoke-Tool 'Win11Debloat (Raphire)' "& ([scriptblock]::Create((Invoke-RestMethod 'https://debloat.raphi.re/')))"
+    Invoke-Tool 'Winhance'               "& ([scriptblock]::Create((Invoke-RestMethod 'https://get.winhance.net')))"
+    Invoke-Tool 'PowerShellPerfect (your profile)' "& ([scriptblock]::Create((Invoke-RestMethod 'https://github.com/26zl/PowerShellPerfect/raw/main/setup.ps1'))) -SkipHashCheck"
+} else {
+    Write-Host "    skipped all tweak tools" -ForegroundColor DarkGray
+    Write-Event 'SKIP' 'all tweak tools skipped'
+}
 
 # Summary
 Write-Host "`n=====================================================" -ForegroundColor Green
@@ -376,18 +408,6 @@ Write-Host "Reboot to finish features and WSL2, then verify: Windows features, '
 if ($log) { Write-Host "Transcript: $log" -ForegroundColor DarkGray }
 if ($eventLog) { Write-Host "Event log:  $eventLog" -ForegroundColor DarkGray }
 Write-Host "=====================================================" -ForegroundColor Green
-
-# External tweak tools
-Write-Host "`n=== External tweak tools (opt in) ===" -ForegroundColor Magenta
-Write-Host "Optional. Each runs in its own new window, so it can't clear or overwrite this one." -ForegroundColor DarkGray
-if ((Read-Host "Configure any tweak tools? Type y to choose them one by one (anything else skips all)") -match '^(y|yes)$') {
-    Invoke-Tool 'Win11Debloat (Raphire)' "& ([scriptblock]::Create((Invoke-RestMethod 'https://debloat.raphi.re/')))"
-    Invoke-Tool 'Winhance'               "& ([scriptblock]::Create((Invoke-RestMethod 'https://get.winhance.net')))"
-    Invoke-Tool 'PowerShellPerfect (your profile)' "& ([scriptblock]::Create((Invoke-RestMethod 'https://github.com/26zl/PowerShellPerfect/raw/main/setup.ps1'))) -SkipHashCheck"
-} else {
-    Write-Host "    skipped all tweak tools" -ForegroundColor DarkGray
-    Write-Event 'SKIP' 'all tweak tools skipped'
-}
 
 } finally {
     $mins = [Math]::Round(((Get-Date) - $runStart).TotalMinutes, 1)

@@ -37,6 +37,7 @@ Re-running is fine: installed apps are skipped. Note it also runs `winget upgrad
 - **AI:** Ollama (local LLM runtime)
 - **Sysadmin / net:** PowerToys, Sysinternals Suite, WinSCP, PuTTY, MobaXterm, Tailscale, WireGuard, Mullvad VPN
 - **Cybersec:** Wireshark, Nmap, Burp Suite Community, KeePassXC
+- **Sysmon:** system activity logging to the event log — built-in Sysmon on Windows 11 24H2+ (enables the optional feature if needed), signature-checked Sysinternals download on older Windows, configured with a pinned [SwiftOnSecurity config](sysmon/sysmonconfig-export.xml) and a 512 MB log
 - **Browser:** Google Chrome, Tor Browser
 - **Cleanup / maintenance:** Malwarebytes, AdwCleaner, BleachBit, DriverStore Explorer
 - **Utilities:** Rufus, balenaEtcher, Steam, Windows Notepad (Store)
@@ -59,8 +60,9 @@ VS Build Tools and VirtualBox are large; remove those lines if you don't need th
 
 - Reboot after running to finish Sandbox, Hyper-V, and WSL2 (`wsl -l -v` to verify).
 - The external tweak tools (Win11Debloat, Winhance, PowerShellPerfect) only run if you explicitly type `y`, and each runs in its own process.
-- Only official upstream URLs are used; they fetch the latest version on each run.
+- Automatic installers come from the named vendors or projects; review their URLs and current contents before opting in because most are fetched at run time.
 - The bundled `OfficeSetup.exe` is Microsoft's signed setup stub; the script verifies its pinned SHA-256 hash and Microsoft's Authenticode signature before running it. If you ever replace the stub, refresh `$officeSha256` in `setup.ps1` with `Get-FileHash office\OfficeSetup.exe`.
+- Sysmon can also be set up on its own (existing machines, no full setup needed) from an elevated PowerShell: `irm https://github.com/26zl/personal-windows-setup/raw/main/sysmon/install-sysmon.ps1 | iex`. Re-running only reapplies the config. If you replace `sysmon\sysmonconfig-export.xml` (e.g. with a newer SwiftOnSecurity release), refresh `$configSha256` in `install-sysmon.ps1` with `Get-FileHash sysmon\sysmonconfig-export.xml`.
 - Kubernetes runs inside Docker Desktop (enable it in Settings); no separate cluster tooling is installed.
 - Cloud and ops tooling (Ansible, Terraform, and similar) isn't installed by this script; install and run it inside the Debian WSL environment.
 - Java build tools (Maven, Gradle) aren't on winget; install them via Chocolatey or Scoop in a normal shell, or from the Debian WSL.
@@ -68,4 +70,4 @@ VS Build Tools and VirtualBox are large; remove those lines if you don't need th
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+Project code is MIT licensed. The bundled Sysmon configuration is CC BY 4.0; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for attribution.
